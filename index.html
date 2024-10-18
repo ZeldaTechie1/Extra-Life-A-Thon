@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0' />
+    <title>ExtraLife-A-Thon</title>
+    <script src="luxon.js"></script>
+    <script src="axios.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script>
+        let timerOn = false;
+        const DateTime = luxon.DateTime;
+
+        // Settings
+        const teamID = '541576';
+        const requestUrl = `https://www.extra-life.org/api/participants/${teamID}/milestones`;
+        //const startDateTime = DateTime.local(); // Use local date/time.
+        const totalRaisedStartingAmount = 0; // Amount of money raised to start counting from, in dollars.
+        const initialMilliseconds = 28800500; // 8 hours.
+        const millisecondsPerDollar = 60000;
+
+        let totalAmountRaised = 0;
+        let timerDisplay = '00:00:00';
+        let totalMillisecondsLeft = initialMilliseconds;
+        let lastTimeUpdated;
+        let timerInterval;
+        $(()=>{
+            $('#buttonPause').hide();
+            $('#buttonReset').hide();
+            $('#buttonStart').show();
+        });
+
+        function StartTimer(){
+            if(timerInterval != null)
+                return;
+            $('#buttonPause').show();
+            $('#buttonReset').show();
+            $('#buttonStart').hide();
+            const requestData = async () => {
+                const axiosOptions = {
+                    method: 'GET',
+                    url: requestUrl,
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache',
+                        'Expires': '0',
+                    },
+                };
+
+                try {
+                    const result = await axios(axiosOptions);
+                    console.log(result);
+                    console.log(result.data.IsCompleted);
+                    totalAmountRaised = result.data.sumDonations + result.data.sumPledges;
+                } catch (err) {
+                    console.error('Extra Life API request failed.', err);
+                };
+            }
+
+            SetTimerInterval();
+
+            const requestInterval = setInterval(() => {
+                requestData();
+            }, 20000);
+
+            lastTimeUpdated = DateTime.now();
+            RefreshTimer();
+            requestData();
+            timerOn = true;
+        }
+
+        function UpdateTimer() {
+                let timeSinceLastUpdate = DateTime.now().diff(lastTimeUpdated).milliseconds;
+                totalMillisecondsLeft -= timeSinceLastUpdate;
+                RefreshTimer();
+                lastTimeUpdated = DateTime.now();
+            }
+
+        function SetTimerInterval()
+        {
+            timerInterval = setInterval(() => {
+                if(timerOn)
+                    UpdateTimer();
+                if (totalMillisecondsLeft < 1) {
+                    clearInterval(timerInterval);
+                    timerDisplay = '00:00:00';
+                    timerOn = false;
+                }
+            }, 1000);
+        }
+
+        function ToggleTimer()
+        {
+            timerOn = !timerOn;
+            if(timerOn)
+            {
+                lastTimeUpdated = DateTime.now();
+                $('#buttonPause').val("Pause Timer");   
+            }
+            else{
+                $('#buttonPause').val("Resume Timer");
+            }
+                
+        }
+
+        function ResetTimer(){
+            totalMillisecondsLeft = initialMilliseconds;
+            RefreshTimer();
+            clearInterval(timerInterval);
+            SetTimerInterval();
+        }
+
+        function RefreshTimer()
+        {
+            tempTimeLeft = totalMillisecondsLeft;
+            let hours = Math.floor(tempTimeLeft / 3600000);
+            tempTimeLeft -= hours * 3600000;
+            let minutes = Math.floor(tempTimeLeft / 60000);
+            tempTimeLeft -= minutes * 60000;
+            let seconds = Math.floor(tempTimeLeft / 1000);
+            if(seconds == 60)
+            {
+                seconds = 0;
+                minutes++;
+                if(minutes == 60)
+                {
+                    minutes = 0;
+                    hours++;
+                }
+            }
+
+            hours = Math.max(hours, 0);
+            minutes = Math.max(minutes, 0);
+            seconds = Math.max(seconds, 0);
+
+            const h = String(hours).padStart(2, '0');
+            const m = String(minutes).padStart(2, '0');
+            const s = String(seconds).padStart(2, '0');
+
+            timerDisplay = `${h}:${m}:${s}`;
+            document.getElementById('root').innerHTML = timerDisplay;
+        }
+
+    </script>
+</head>
+<body>
+    <div id='root'></div>
+    <input id="buttonStart" type="button" value="Start Timer" onclick="StartTimer()">
+    <input id="buttonPause" type="button" value="Pause Timer" onclick="ToggleTimer()">
+    <input id="buttonReset" type="button" value="Reset Timer" onclick="ResetTimer()">
+</body>
+</html>
