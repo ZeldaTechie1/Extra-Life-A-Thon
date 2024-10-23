@@ -13,37 +13,62 @@
 
         // Settings
         const teamID = '541576';
-        const requestUrl = `https://www.extra-life.org/api/participants/${teamID}/milestones`;
+        const requestUrl = `https://www.extra-life.org/api/participants/${teamID}/`;
         //const startDateTime = DateTime.local(); // Use local date/time.
-        const totalRaisedStartingAmount = 0; // Amount of money raised to start counting from, in dollars.
         const initialMilliseconds = 28800500; // 8 hours.
-        const millisecondsPerDollar = 60000;
+        const millisecondsPerDollar = 14400;//~15 seconds
 
         let totalAmountRaised = 0;
+        let lastTotalAmountRaised = totalAmountRaised;
         let timerDisplay = '00:00:00';
         let totalMillisecondsLeft = initialMilliseconds;
         let lastTimeUpdated;
         let timerInterval;
+        let requestInterval;
+        let requestData;
+        let maxAmountToRaise = 2000;
         $(()=>{
             $('#buttonPause').hide();
             $('#buttonReset').hide();
             $('#buttonStart').show();
         });
 
-        function StartTimer(){
+        function StartTimer()
+        {
             if(timerInterval != null)
                 return;
             $('#buttonPause').show();
             $('#buttonReset').show();
             $('#buttonStart').hide();
-            const requestData = async () => {
+
+            SetRequestData();
+            SetTimerInterval();
+            SetRequestInterval();
+            lastTimeUpdated = DateTime.now();
+            requestData();
+            UpdateTimer();
+            timerOn = true;
+        }
+
+        function UpdateTimer() 
+        {
+            let timeSinceLastUpdate = DateTime.now().diff(lastTimeUpdated).milliseconds;
+            totalMillisecondsLeft -= timeSinceLastUpdate;
+            let totalRaisedDifference = totalAmountRaised - lastTotalAmountRaised;
+            totalMillisecondsLeft += millisecondsPerDollar * totalRaisedDifference;
+            lastTotalAmountRaised = totalAmountRaised;
+            RefreshTimer();
+            lastTimeUpdated = DateTime.now();
+        }
+        function SetRequestData()
+        {
+            requestData = async () => {
                 const axiosOptions = {
                     method: 'GET',
                     url: requestUrl,
-                    headers: {
-                        'Cache-Control': 'no-cache',
-                        'Pragma': 'no-cache',
-                        'Expires': '0',
+                    params: {
+                        version: '1.3',
+                        t: DateTime.now().toMillis(),
                     },
                 };
 
@@ -52,29 +77,17 @@
                     console.log(result);
                     console.log(result.data.IsCompleted);
                     totalAmountRaised = result.data.sumDonations + result.data.sumPledges;
+                    totalAmountRaised = Math.min(totalAmountRaised,2000);
                 } catch (err) {
                     console.error('Extra Life API request failed.', err);
+                    if (err.status === 404) {
+                        // It is important to stop making requests for 404 responses otherwise rate
+                        // limiting may be applied.
+                        StopIntervals();
+                    }
                 };
             }
-
-            SetTimerInterval();
-
-            const requestInterval = setInterval(() => {
-                requestData();
-            }, 20000);
-
-            lastTimeUpdated = DateTime.now();
-            RefreshTimer();
-            requestData();
-            timerOn = true;
         }
-
-        function UpdateTimer() {
-                let timeSinceLastUpdate = DateTime.now().diff(lastTimeUpdated).milliseconds;
-                totalMillisecondsLeft -= timeSinceLastUpdate;
-                RefreshTimer();
-                lastTimeUpdated = DateTime.now();
-            }
 
         function SetTimerInterval()
         {
@@ -82,11 +95,18 @@
                 if(timerOn)
                     UpdateTimer();
                 if (totalMillisecondsLeft < 1) {
-                    clearInterval(timerInterval);
+                    StopIntervals();
                     timerDisplay = '00:00:00';
                     timerOn = false;
                 }
             }, 1000);
+        }
+
+        function SetRequestInterval()
+        {
+            requestInterval = setInterval(() => {
+                requestData();
+            }, 20000);
         }
 
         function ToggleTimer()
@@ -103,11 +123,14 @@
                 
         }
 
-        function ResetTimer(){
+        function ResetTimer()
+        {
             totalMillisecondsLeft = initialMilliseconds;
             RefreshTimer();
-            clearInterval(timerInterval);
+            StopIntervals();
             SetTimerInterval();
+            if(timerOn)
+                ToggleTimer();
         }
 
         function RefreshTimer()
@@ -139,6 +162,12 @@
 
             timerDisplay = `${h}:${m}:${s}`;
             document.getElementById('root').innerHTML = timerDisplay;
+        }
+
+        function StopIntervals() 
+        {
+            clearInterval(timerInterval);
+            clearInterval(requestInterval);
         }
 
     </script>
